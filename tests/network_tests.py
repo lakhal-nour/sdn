@@ -1,14 +1,14 @@
 # Fichier: tests/network_tests.py
 import time
+import sys  # 👈 IMPORT TRÈS IMPORTANT POUR LE PIPELINE CI/CD
 from mininet.net import Mininet
 from mininet.node import RemoteController, OVSKernelSwitch
 from mininet.topo import Topo
-from mininet.cli import CLI
 from mininet.log import setLogLevel, info
 
 class SimpleTreeTopo(Topo):
     def build(self):
-        # Création de la topologie (identique à ton --topo tree,depth=2,fanout=2)
+        # Création de la topologie
         s1 = self.addSwitch('s1')
         s2 = self.addSwitch('s2')
         s3 = self.addSwitch('s3')
@@ -39,27 +39,42 @@ def run_automated_tests():
     info("*** ⏳ Attente de 15 secondes pour que Ryu et Ansible injectent les règles Firewall...\n")
     time.sleep(15)
 
+    # 📊 VARIABLES POUR LE PIPELINE GITHUB
+    test1_ok = False
+    test2_ok = False
+
     info("*** 🛡️ TEST 1: Vérification du blocage ICMP (Pingall)...\n")
-    # On s'attend à 100% de perte (drop)
     dropped = net.pingAll()
     if dropped == 100.0:
-        info("✅ TEST 1 RÉUSSI : Le pare-feu bloque bien l'ICMP (Zero Trust) !\n")
+        info("✅ TEST 1 RÉUSSI : Le pare-feu bloque bien l'ICMP !\n")
+        test1_ok = True
     else:
-        info(f"❌ TEST 1 ÉCHOUÉ : Le ping est passé (Perte: {dropped}%). Le pare-feu a un problème.\n")
+        info(f"❌ TEST 1 ÉCHOUÉ : Le ping est passé (Perte: {dropped}%).\n")
+        test1_ok = False
 
     info("*** 🌐 TEST 2: Vérification du trafic TCP (Web/Applicatif)...\n")
     h1, h4 = net.get('h1', 'h4')
-    h4.cmd('iperf -s &') # Lance le serveur TCP en arrière-plan
+    h4.cmd('iperf -s &') 
     time.sleep(2)
-    result = h1.cmd('iperf -c 10.0.0.4 -t 3') # Test client
+    result = h1.cmd('iperf -c 10.0.0.4 -t 3') 
     
     if "Connection failed" in result or "refused" in result:
         info("❌ TEST 2 ÉCHOUÉ : Le trafic TCP est bloqué.\n")
+        test2_ok = False
     else:
-        info("✅ TEST 2 RÉUSSI : Le trafic TCP passe parfaitement (Règle ALLOW opérationnelle) !\n")
+        info("✅ TEST 2 RÉUSSI : Le trafic TCP passe parfaitement !\n")
+        test2_ok = True
 
     info("*** 🛑 Arrêt du réseau virtuel...\n")
-    net.stop()
+    net.stop() # Toujours arrêter le réseau avant de quitter !
+
+    # 🛑 DÉCISION FINALE POUR GITHUB ACTIONS
+    if test1_ok and test2_ok:
+        info("🟢 TOUS LES TESTS SONT PASSÉS. Le Pipeline CI/CD va valider ce build.\n")
+        sys.exit(0)  # Dit à GitHub Actions: "Succès"
+    else:
+        info("🔴 ÉCHEC DES TESTS. Le Pipeline CI/CD va rejeter ce build.\n")
+        sys.exit(1)  # Dit à GitHub Actions: "Erreur"
 
 if __name__ == '__main__':
     run_automated_tests()
