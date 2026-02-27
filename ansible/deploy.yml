@@ -1,0 +1,8 @@
+- name: Deploy SDN Infrastructure
+  hosts: local
+  become: false
+
+  roles:
+    - controller
+    - topology
+    - firewall
