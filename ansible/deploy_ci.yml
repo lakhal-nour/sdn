@@ -1,0 +1,12 @@
+# ansible/deploy_ci.yml
+- name: Deploy ephemeral SDN CI environment
+  hosts: local
+  become: false
+
+  vars:
+    topology_mode: ci
+
+  roles:
+    - controller
+    - topology
+    - firewall

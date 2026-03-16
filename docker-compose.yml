@@ -1,0 +1,25 @@
+# Fichier: docker-compose.yml
+version: '3.8'
+
+services:
+  # 1. Ton traducteur Python (L'exporter)
+  ryu_exporter:
+    build:
+      context: . # Indique que le contexte de build est la racine du projet
+      dockerfile: docker/Dockerfile.exporter
+    network_mode: "host"
+    restart: always
+
+  # 2. La base de données temporelle
+  prometheus:
+    image: prom/prometheus:latest
+    network_mode: "host"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+    restart: always
+
+  # 3. Le Dashboard
+  grafana:
+    image: grafana/grafana:latest
+    network_mode: "host"
+    restart: always

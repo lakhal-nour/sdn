@@ -1,24 +1,7 @@
-- name: Build Docker image
-  command: docker build -t mon-ryu:v2 -f docker/Dockerfile .
-  args:
-    chdir: "{{ playbook_dir }}/.."
+- name: Include CI topology tasks
+  include_tasks: ci.yml
+  when: topology_mode == "ci"
 
-- name: Remove existing controller container if exists
-  shell: docker rm -f sdn-controller || true
-
-- name: Run SDN controller
-  command: >
-    docker run -d
-    --name sdn-controller
-    -p 6633:6633
-    -p 6653:6653
-    -p 8080:8080
-    mon-ryu:v2
-
-- name: Wait for REST API port to open
-  ansible.builtin.wait_for:
-    host: 127.0.0.1
-    port: 8080
-    state: started
-    delay: 3
-    timeout: 30
+- name: Include LAB topology tasks
+  include_tasks: lab.yml
+  when: topology_mode == "lab"

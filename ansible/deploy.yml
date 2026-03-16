@@ -1,8 +1,13 @@
+---
 - name: Deploy SDN Infrastructure
   hosts: local
   become: false
 
   roles:
     - controller
-    - topology
-    
+
+  tasks:
+    - name: 🐳 Déployer toute la supervision (Prometheus, Grafana, Exporter)
+      shell: docker-compose up -d --build
+      args:
+        chdir: "{{ playbook_dir }}/.."

@@ -1,0 +1,16 @@
+# Fichier: docker/Dockerfile.exporter
+
+# 1. On part d'une image Python légère
+FROM python:3.9-slim
+
+# 2. On se place dans un dossier de travail
+WORKDIR /app
+
+# 3. On installe tes fameuses dépendances (plus aucun conflit avec ta machine !)
+RUN pip install prometheus_client requests
+
+# 4. On copie ton script depuis ton projet vers le conteneur
+COPY scripts/ryu_exporter.py /app/
+
+# 5. On lance le script quand le conteneur démarre
+CMD ["python3", "ryu_exporter.py"]

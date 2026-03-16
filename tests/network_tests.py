@@ -1,105 +1,213 @@
-# Fichier: tests/network_tests.py
-import time
+# tests/network_tests.py
 import sys
-import os
-from mininet.net import Mininet
-from mininet.node import RemoteController, OVSKernelSwitch
-from mininet.topo import Topo
-from mininet.log import setLogLevel, info
+import time
+import subprocess
 from functools import partial
 
-class DatacenterTopo(Topo):
-    def build(self):
-        spine1 = self.addSwitch('s1')
-        spine2 = self.addSwitch('s2')
-        leaf1 = self.addSwitch('s3')
-        leaf2 = self.addSwitch('s4')
-        h1 = self.addHost('h1', ip='10.0.0.1')
-        h2 = self.addHost('h2', ip='10.0.0.2')
-        h3 = self.addHost('h3', ip='10.0.0.3')
-        h4 = self.addHost('h4', ip='10.0.0.4')
-        
-        self.addLink(h1, leaf1)
-        self.addLink(h2, leaf1)
-        self.addLink(h3, leaf2)
-        self.addLink(h4, leaf2)
-        
-        self.addLink(leaf1, spine1)
-        self.addLink(leaf1, spine2)
-        self.addLink(leaf2, spine1)
-        self.addLink(leaf2, spine2)
+from mininet.net import Mininet
+from mininet.node import RemoteController, OVSKernelSwitch
+from mininet.link import TCLink
+from mininet.log import setLogLevel, info
+
+# Import de la topologie projet
+sys.path.append(".")
+from topology.datacenter_topo import DatacenterTopo
+
+
+# =========================
+# Configuration centrale
+# =========================
+CONTROLLER_IP = "127.0.0.1"
+CONTROLLER_PORT = 6633
+POLICY_DEPLOY_SCRIPT = "scripts/deploy_policies.py"
+
+# Cas de tests facilement modifiables si la politique change
+ALLOW_TESTS = [
+    ("h1", "10.0.0.2", "h2"),
+]
+
+DENY_TESTS = [
+    ("h1", "10.0.0.4", "h4"),
+]
+
+QOS_TESTS = [
+    ("h1", "h2", 15.0),   # max toléré en Mbps
+]
+
+
+def run_command(cmd):
+    """Exécute une commande shell."""
+    return subprocess.run(cmd, shell=True, text=True, capture_output=True)
+
+
+def deploy_policies():
+    """Déploie les policies via script externe."""
+    info("*** 🚀 Déploiement des politiques réseau...\n")
+    result = run_command(f"python3 {POLICY_DEPLOY_SCRIPT}")
+
+    if result.returncode != 0:
+        info("❌ Échec du déploiement des policies.\n")
+        info(result.stderr + "\n")
+        return False
+
+    info("✅ Policies déployées avec succès.\n")
+    return True
+
+
+def test_ping_allowed(net, src_name, dst_ip, dst_name):
+    """Teste qu'un ping doit être autorisé."""
+    info(f"*** 🟢 TEST ALLOW: {src_name} -> {dst_name}\n")
+    src = net.get(src_name)
+    result = src.cmd(f"ping -c 2 {dst_ip}")
+
+    if "0% packet loss" in result:
+        info(f"   ✅ SUCCÈS : {src_name} communique avec {dst_name}.\n")
+        return True
+
+    info(f"   ❌ ÉCHEC : {src_name} ne communique pas avec {dst_name}.\n")
+    info(result + "\n")
+    return False
+
+
+def test_ping_denied(net, src_name, dst_ip, dst_name):
+    """Teste qu'un ping doit être bloqué."""
+    info(f"*** 🔴 TEST DENY: {src_name} -> {dst_name}\n")
+    src = net.get(src_name)
+    result = src.cmd(f"ping -c 2 {dst_ip}")
+
+    if "100% packet loss" in result or "Destination Host Unreachable" in result:
+        info(f"   ✅ SUCCÈS : le trafic {src_name} -> {dst_name} est bien bloqué.\n")
+        return True
+
+    info(f"   ❌ ÉCHEC : le trafic {src_name} -> {dst_name} n'est pas bloqué.\n")
+    info(result + "\n")
+    return False
+
+
+def parse_iperf_mbps(bw_str):
+    """
+    Convertit une sortie iperf Mininet en Mbps.
+    Exemples:
+      '9.52 Mbits/sec' -> 9.52
+      '800 Kbits/sec'  -> 0.8
+      '1.20 Gbits/sec' -> 1200
+    """
+    try:
+        parts = bw_str.strip().split()
+        value = float(parts[0])
+        unit = parts[1]
+
+        if unit.startswith("Kbit"):
+            return value / 1000.0
+        if unit.startswith("Mbit"):
+            return value
+        if unit.startswith("Gbit"):
+            return value * 1000.0
+    except Exception:
+        return None
+
+    return None
+
+
+def test_qos(net, src_name, dst_name, max_mbps):
+    """Teste qu'une limitation QoS est respectée."""
+    info(f"*** 📊 TEST QoS: {src_name} -> {dst_name}, max attendu ~ {max_mbps} Mbps\n")
+    src = net.get(src_name)
+    dst = net.get(dst_name)
+
+    try:
+        bw_result = net.iperf((src, dst))
+        measured_bw_str = bw_result[0]
+        info(f"   Vitesse mesurée : {measured_bw_str}\n")
+
+        measured_mbps = parse_iperf_mbps(measured_bw_str)
+        if measured_mbps is None:
+            info("   ❌ ÉCHEC : format iperf non reconnu.\n")
+            return False
+
+        if measured_mbps <= max_mbps:
+            info(f"   ✅ SUCCÈS : QoS respectée ({measured_mbps:.2f} Mbps <= {max_mbps} Mbps).\n")
+            return True
+
+        info(f"   ❌ ÉCHEC : QoS non respectée ({measured_mbps:.2f} Mbps > {max_mbps} Mbps).\n")
+        return False
+
+    except Exception as e:
+        info(f"   ❌ ÉCHEC QoS : {e}\n")
+        return False
+
+
+def build_network():
+    """Construit le réseau Mininet éphémère."""
+    info("*** 🏗️ Création du réseau CI éphémère...\n")
+    topo = DatacenterTopo()
+    switch_of13 = partial(OVSKernelSwitch, protocols="OpenFlow13")
+
+    net = Mininet(
+        topo=topo,
+        switch=switch_of13,
+        link=TCLink,
+        controller=None,
+        autoSetMacs=True,
+    )
+
+    c0 = net.addController(
+        "c0",
+        controller=RemoteController,
+        ip=CONTROLLER_IP,
+        port=CONTROLLER_PORT,
+    )
+
+    c0.start()
+    time.sleep(2)
+    net.start()
+
+    return net
+
 
 def run_automated_tests():
-    setLogLevel('info')
-    info("*** 🏗️ Création du réseau NetDevOps...\n")
-    
-    topo = DatacenterTopo()
-    switch_of13 = partial(OVSKernelSwitch, protocols='OpenFlow13')
-    
-    # On initialise Mininet
-    net = Mininet(topo=topo, switch=switch_of13, controller=None)
-    
-    # On connecte le contrôleur Ryu
-    c0 = net.addController('c0', controller=RemoteController, ip='127.0.0.1', port=6653)
-    
-    # CORRECTION : On démarre explicitement le contrôleur et on attend 3 secondes 
-    # pour éviter le message "Unable to contact the remote controller"
-    c0.start()
-    time.sleep(3)
-    
-    # Maintenant on peut démarrer le réseau sereinement
-    net.start()
-    
-    info("*** ⏳ Attente de 10s pour l'apprentissage du réseau...\n")
-    time.sleep(10)
+    setLogLevel("info")
+    net = None
 
-    info("*** 🔧 Injection de la règle ciblée : Bloquer UNIQUEMENT h1 vers h4...\n")
-    dpids = ["0000000000000001", "0000000000000002", "0000000000000003", "0000000000000004"]
-    for dpid in dpids:
-        # 1. Activer le firewall
-        os.system(f"curl -s -X PUT http://127.0.0.1:8080/firewall/module/enable/{dpid}")
-        
-        # 2. Règle spécifique : Bloquer TOUT trafic de 10.0.0.1 (h1) vers 10.0.0.4 (h4)
-        rule_block = '{{"priority": 100, "dl_type": "IPv4", "nw_src": "10.0.0.1/32", "nw_dst": "10.0.0.4/32", "actions": "DENY"}}'
-        os.system(f"curl -s -X POST -d '{rule_block}' http://127.0.0.1:8080/firewall/rules/{dpid}")
-        
-        # 3. Règle globale : Autoriser tout le reste (IPv4 et ARP)
-        os.system(f"curl -s -X POST -d '{{\"priority\": 10, \"dl_type\": \"IPv4\", \"actions\": \"ALLOW\"}}' http://127.0.0.1:8080/firewall/rules/{dpid}")
-        os.system(f"curl -s -X POST -d '{{\"priority\": 10, \"dl_type\": \"ARP\", \"actions\": \"ALLOW\"}}' http://127.0.0.1:8080/firewall/rules/{dpid}")
+    try:
+        net = build_network()
 
-    info("*** ⏳ Application des règles...\n")
-    time.sleep(5)
+        info("*** ⏳ Attente de 10 secondes pour l'apprentissage réseau...\n")
+        time.sleep(10)
 
-    h1, h2, h4 = net.get('h1', 'h2', 'h4')
-    
-    # --- TEST 1 : LE TRAFIC AUTORISÉ (h1 vers h2) ---
-    info("*** 🟢 TEST 1: Ping autorisé (h1 vers h2). On s'attend à 0% dropped...\n")
-    res1 = h1.cmd('ping -c 2 10.0.0.2')
-    if "0% packet loss" in res1:
-        info("   ✅ SUCCÈS : h1 communique parfaitement avec h2 !\n")
-        test1_ok = True
-    else:
-        info("   ❌ ÉCHEC : Le trafic h1 -> h2 ne passe pas.\n")
-        test1_ok = False
+        if not deploy_policies():
+            return 1
 
-    # --- TEST 2 : LE TRAFIC BLOQUÉ (h1 vers h4) ---
-    info("*** 🔴 TEST 2: Ping bloqué (h1 vers h4). On s'attend à 100% dropped...\n")
-    res2 = h1.cmd('ping -c 2 10.0.0.4')
-    if "100% packet loss" in res2 or "100% loss" in res2 or "errors" in res2:
-        info("   ✅ SUCCÈS : Le Firewall bloque bien h1 vers h4 !\n")
-        test2_ok = True
-    else:
-        info("   ❌ ÉCHEC : h1 arrive toujours à ping h4.\n")
-        test2_ok = False
+        info("*** ⏳ Attente de 5 secondes pour application des policies...\n")
+        time.sleep(5)
 
-    net.stop()
+        all_ok = True
 
-    if test1_ok and test2_ok:
-        info("\n🏆 RÉSULTAT FINAL : Workflow validé avec succès ! Le Firewall cible parfaitement.\n")
-        sys.exit(0)
-    else:
-        info("\n💥 RÉSULTAT FINAL : Échec des tests.\n")
-        sys.exit(1)
+        for src_name, dst_ip, dst_name in ALLOW_TESTS:
+            all_ok = test_ping_allowed(net, src_name, dst_ip, dst_name) and all_ok
 
-if __name__ == '__main__':
-    run_automated_tests()
+        for src_name, dst_ip, dst_name in DENY_TESTS:
+            all_ok = test_ping_denied(net, src_name, dst_ip, dst_name) and all_ok
+
+        for src_name, dst_name, max_mbps in QOS_TESTS:
+            all_ok = test_qos(net, src_name, dst_name, max_mbps) and all_ok
+
+        if all_ok:
+            info("\n🏆 RÉSULTAT FINAL : Tous les tests CI ont réussi.\n")
+            return 0
+
+        info("\n💥 RÉSULTAT FINAL : Un ou plusieurs tests CI ont échoué.\n")
+        return 1
+
+    except Exception as e:
+        info(f"\n💥 Exception pendant les tests CI : {e}\n")
+        return 1
+
+    finally:
+        if net is not None:
+            info("*** 🛑 Arrêt du réseau CI éphémère...\n")
+            net.stop()
+
+
+if __name__ == "__main__":
+    sys.exit(run_automated_tests())

@@ -1,0 +1,11 @@
+- name: Ensure monitoring directory exists
+  stat:
+    path: "{{ playbook_dir }}/../monitoring"
+  register: monitoring_dir
+
+- name: Start monitoring stack if docker-compose exists
+  shell: docker compose up -d
+  args:
+    chdir: "{{ playbook_dir }}/../monitoring"
+  when: monitoring_dir.stat.exists
+  failed_when: false

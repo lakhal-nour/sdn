@@ -1,0 +1,35 @@
+{
+    "meters": [
+        {
+            "description": "Limiteur de bande passante a 10 Mbps",
+            "flags": "KBPS",
+            "meter_id": 1,
+            "bands": [
+                {
+                    "type": "DROP",
+                    "rate": 10000
+                }
+            ]
+        }
+    ],
+    "qos_rules": [
+        {
+            "description": "Appliquer le Meter 1 au trafic de h1",
+            "priority": 150,
+            "match": {
+                "eth_type": 2048,
+                "ipv4_src": "10.0.0.1"
+            },
+            "instructions": [
+                {
+                    "type": "METER",
+                    "meter_id": 1
+                },
+                {
+                    "type": "GOTO_TABLE",
+                    "table_id": 1
+                }
+            ]
+        }
+    ]
+}

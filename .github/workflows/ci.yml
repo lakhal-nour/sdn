@@ -1,0 +1,22 @@
+# .github/workflows/ci.yml
+name: SDN CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  ci:
+    runs-on: self-hosted
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Build Docker image
+        run: docker build -t mon-ryu:v2 -f docker/Dockerfile .
+
+      - name: Run CI playbook
+        run: ansible-playbook ansible/deploy_ci.yml -i ansible/inventory.ini

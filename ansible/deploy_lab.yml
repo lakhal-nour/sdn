@@ -1,0 +1,13 @@
+# ansible/deploy_lab.yml
+- name: Deploy persistent SDN lab
+  hosts: local
+  become: false
+
+  vars:
+    topology_mode: lab
+
+  roles:
+    - controller
+    - monitoring
+    - topology
+    - firewall
