@@ -1,0 +1,16 @@
+- name: Vérifier si la topologie LAB tourne déjà
+  shell: pgrep -f start_lab_topology.py
+  register: topo_check
+  failed_when: false
+  changed_when: false
+
+- name: Démarrer la topologie LAB si elle est absente
+  shell: >
+    nohup python3 {{ playbook_dir }}/../topology/start_lab_topology.py
+    > /tmp/mininet-lab.log 2>&1 &
+  become: yes
+  when: topo_check.rc != 0
+
+- name: Attendre quelques secondes que la topologie démarre
+  pause:
+    seconds: 8

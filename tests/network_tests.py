@@ -1,4 +1,4 @@
-# tests/network_tests.py
+import os
 import sys
 import time
 import subprocess
@@ -9,10 +9,12 @@ from mininet.node import RemoteController, OVSKernelSwitch
 from mininet.link import TCLink
 from mininet.log import setLogLevel, info
 
-# Import de la topologie projet
-sys.path.append(".")
-from topology.datacenter_topo import DatacenterTopo
+# Ajouter la racine du projet au PYTHONPATH
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
 
+from topology.datacenter_topo import DatacenterTopo
 
 # =========================
 # Configuration centrale

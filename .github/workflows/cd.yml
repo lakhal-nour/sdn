@@ -1,11 +1,21 @@
-- name: Ensure monitoring directory exists
-  stat:
-    path: "{{ playbook_dir }}/../monitoring"
-  register: monitoring_dir
+name: SDN CD
 
-- name: Start monitoring stack if docker-compose exists
-  shell: docker compose up -d
-  args:
-    chdir: "{{ playbook_dir }}/../monitoring"
-  when: monitoring_dir.stat.exists
-  failed_when: false
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy-lab:
+    runs-on: self-hosted
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Build Docker image
+        run: docker build -t mon-ryu:v2 -f docker/Dockerfile .
+
+      - name: Deploy persistent lab
+        run: ansible-playbook ansible/deploy_lab.yml -i ansible/inventory.ini
+
+      - name: Validate persistent lab
+        run: sudo python3 tests/validate_lab.py
