@@ -9,10 +9,12 @@ on:
 jobs:
   ci:
     runs-on: self-hosted
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Build Docker image
         run: docker build -t mon-ryu:v2 -f docker/Dockerfile .
