@@ -1,0 +1,28 @@
+name: SDN NetDevOps Pipeline
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  sdn-pipeline:
+    runs-on: self-hosted   
+
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v3
+
+      - name: 🧹 Nettoyer l'environnement (Précaution)
+        run: sudo mn -c > /dev/null 2>&1
+
+      - name: 🔍 Vérifier la syntaxe JSON (Tests CI)
+        run: |
+          python3 -m json.tool controller/policies/firewall.json > /dev/null
+          python3 -m json.tool controller/policies/qos.json > /dev/null
+
+      - name: 🚀 Deploy Persistent Lab & Policies (Ansible)
+        run: ansible-playbook ansible/deploy_lab.yml -i ansible/inventory.ini
+
+      - name: 🧪 [CI] Validation du réseau (Tests d'intégration)
+        # Le -B empêche les problèmes de permission __pycache__
+        run: sudo python3 -B tests/validate_lab.py
