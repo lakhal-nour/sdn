@@ -52,16 +52,17 @@ def wait_for_controller(max_retries: int = 20, delay: int = 2) -> bool:
         try:
             with socket.create_connection((CONTROLLER_IP, CONTROLLER_PORT), timeout=2):
                 of_ok = True
-        except Exception:
-            pass
+        except Exception as e:
+            info(f"   OpenFlow error: {e}\n")
 
-        # REST server check: only verify server answers
+        # REST API check using a valid Ryu endpoint
         try:
-            r = requests.get(REST_URL, timeout=2)
-            if r.status_code in (200, 404):
+            r = requests.get(f"{REST_URL}/stats/switches", timeout=2)
+            info(f"   REST status: {r.status_code}\n")
+            if r.status_code == 200:
                 rest_ok = True
-        except Exception:
-            pass
+        except Exception as e:
+            info(f"   REST error: {e}\n")
 
         if of_ok and rest_ok:
             info("*** ✅ Controller is ready.\n")
@@ -71,7 +72,6 @@ def wait_for_controller(max_retries: int = 20, delay: int = 2) -> bool:
         time.sleep(delay)
 
     return False
-
 
 def deploy_policies() -> bool:
     info("*** 🚀 Deploying network policies...\n")
