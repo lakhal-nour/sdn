@@ -1,5 +1,5 @@
 import yaml
-import subprocess
+import os
 import sys
 
 CONFIG_PATH = "/app/iac/controller_config.yml"
@@ -10,9 +10,11 @@ try:
 
     apps = config["controller"]["apps"]
 
-    print(f"🚀 Lancement du contrôleur Ryu avec : {apps}")
+    # flush=True force l'affichage immédiat dans les logs Docker
+    print(f"🚀 Lancement du contrôleur Ryu avec : {apps}", flush=True)
 
-    subprocess.run(["ryu-manager", "--verbose"] + apps)
+    # os.execvp remplace le processus Python par Ryu (Meilleure pratique Docker)
+    os.execvp("ryu-manager", ["ryu-manager", "--verbose"] + apps)
 
 except Exception as e:
     print(f"❌ Erreur : {e}")

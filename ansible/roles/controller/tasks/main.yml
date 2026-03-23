@@ -1,3 +1,8 @@
+- name: 🧹 Nettoyer l'environnement Mininet précédent avant tout
+  shell: mn -c
+  become: yes
+  ignore_errors: yes
+
 - name: Build Docker image
   command: docker build -t mon-ryu:v2 -f docker/Dockerfile .
   args:
@@ -14,7 +19,7 @@
     docker run -d
     --name sdn-controller
     --network sdn_net
-    -p 6633:6633
+    -p 6653:6653
     -p 8080:8080
     mon-ryu:v2
 
@@ -24,9 +29,10 @@
     port: 8080
     delay: 2
     timeout: 30
+
 - name: Wait for OpenFlow port to open
   wait_for:
     host: 127.0.0.1
-    port: 6633
+    port: 6653
     delay: 2
     timeout: 30
