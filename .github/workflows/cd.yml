@@ -1,10 +1,39 @@
 name: SDN CD
 
 on:
-  workflow_dispatch:
+  workflow_run:
+    workflows: ["SDN CI"]
+    types: [completed]
 
 jobs:
   deploy-lab:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: self-hosted
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          clean: false
+
+      - name: Build Docker image
+        run: docker build -t mon-ryu:v2 -f docker/Dockerfile .
+
+      - name: Deploy persistent lab
+        run: ansible-playbook ansible/deploy_lab.yml -i ansible/inventory.ini
+
+      name: SDN CD
+
+on:
+  workflow_run:
+    workflows: ["SDN CI"]
+    types: [completed]
+
+jobs:
+  deploy-lab:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: self-hosted
     env:
       PYTHONDONTWRITEBYTECODE: "1"
