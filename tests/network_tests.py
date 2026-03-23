@@ -33,8 +33,8 @@ QOS_TESTS = [
 
 
 def run_command(cmd: str) -> subprocess.CompletedProcess:
-    return subprocess.run(cmd, shell=True, text=True, capture_output=True)
-
+    # On enlève capture_output pour voir les erreurs en direct !
+    return subprocess.run(cmd, shell=True)
 
 def deploy_policies() -> bool:
     info("*** 🚀 Deploying network policies...\n")
@@ -54,55 +54,53 @@ def deploy_policies() -> bool:
 
 def test_ping_allowed(net: Mininet, src_name: str, dst_ip: str, dst_name: str) -> bool:
     info(f"*** 🟢 ALLOW TEST: {src_name} -> {dst_name}\n")
-    result = net.get(src_name).cmd(f"ping -c 2 {dst_ip}")
+    # -W 1 force le ping à abandonner après 1 seconde s'il n'y a pas de réponse
+    result = net.get(src_name).cmd(f"ping -c 2 -W 1 {dst_ip}")
 
     if "0% packet loss" in result:
         info(f"   ✅ OK: {src_name} can reach {dst_name}\n")
         return True
 
     info(f"   ❌ FAIL: {src_name} cannot reach {dst_name}\n")
-    info(result + "\n")
     return False
 
 
 def test_ping_denied(net: Mininet, src_name: str, dst_ip: str, dst_name: str) -> bool:
     info(f"*** 🔴 DENY TEST: {src_name} -> {dst_name}\n")
-    result = net.get(src_name).cmd(f"ping -c 2 {dst_ip}")
+    result = net.get(src_name).cmd(f"ping -c 2 -W 1 {dst_ip}")
 
     if "100% packet loss" in result or "Destination Host Unreachable" in result:
         info(f"   ✅ OK: traffic {src_name} -> {dst_name} is blocked\n")
         return True
 
     info(f"   ❌ FAIL: traffic {src_name} -> {dst_name} is not blocked\n")
-    info(result + "\n")
     return False
-
-
-def parse_iperf_mbps(bw_str: str):
-    try:
-        value, unit = bw_str.strip().split()[:2]
-        value = float(value)
-
-        if "Kbit" in unit:
-            return value / 1000.0
-        if "Mbit" in unit:
-            return value
-        if "Gbit" in unit:
-            return value * 1000.0
-    except Exception:
-        return None
-
-    return None
 
 
 def test_qos(net: Mininet, src_name: str, dst_name: str, max_mbps: float) -> bool:
     info(f"*** 📊 QoS TEST: {src_name} -> {dst_name}, expected <= {max_mbps} Mbps\n")
 
     try:
-        bw = net.iperf((net.get(src_name), net.get(dst_name)))[0]
-        info(f"   measured throughput: {bw}\n")
+        srv = net.get(dst_name)
+        cli = net.get(src_name)
 
-        mbps = parse_iperf_mbps(bw)
+        # Lancer le serveur iperf en tâche de fond
+        srv.cmd("iperf -s &")
+        time.sleep(1) # Laisser 1 seconde au serveur pour démarrer
+
+        # Lancer le client avec la commande Linux 'timeout' (5 secondes max)
+        # -t 2 signifie que le test iperf doit durer 2 secondes
+        bw_output = cli.cmd(f"timeout 5 iperf -c {srv.IP()} -t 2")
+
+        # Couper le serveur proprement
+        srv.cmd("killall -9 iperf")
+
+        # Si 'timeout' a tué le processus, c'est que le trafic était bloqué
+        if not bw_output.strip() or "Connection timed out" in bw_output:
+            info("   ❌ FAIL: Le test a figé (trafic probablement bloqué par le Firewall)\n")
+            return False
+
+        mbps = parse_iperf_mbps(bw_output)
         if mbps is None:
             info("   ❌ FAIL: unrecognized iperf output format\n")
             return False
@@ -117,7 +115,6 @@ def test_qos(net: Mininet, src_name: str, dst_name: str, max_mbps: float) -> boo
     except Exception as e:
         info(f"   ❌ QoS exception: {e}\n")
         return False
-
 
 def build_network() -> Mininet:
     info("*** 🏗️ Creating ephemeral CI network...\n")
