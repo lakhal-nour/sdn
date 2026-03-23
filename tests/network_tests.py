@@ -3,8 +3,6 @@ import sys
 import time
 import subprocess
 from functools import partial
-import socket
-import requests
 
 from mininet.net import Mininet
 from mininet.node import RemoteController, OVSKernelSwitch
@@ -17,10 +15,8 @@ if PROJECT_ROOT not in sys.path:
 
 from topology.datacenter_topo import DatacenterTopo
 
-# Controller settings
 CONTROLLER_IP = "127.0.0.1"
 CONTROLLER_PORT = 6633
-REST_URL = "http://127.0.0.1:8080"
 POLICY_DEPLOY_SCRIPT = os.path.join(PROJECT_ROOT, "scripts", "deploy_policies.py")
 
 ALLOW_TESTS = [
@@ -39,39 +35,6 @@ QOS_TESTS = [
 def run_command(cmd: str) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, shell=True, text=True, capture_output=True)
 
-
-def wait_for_controller(max_retries: int = 20, delay: int = 2) -> bool:
-    """Wait until both OpenFlow and REST endpoints are reachable."""
-    info("*** ⏳ Waiting for SDN controller (REST + OpenFlow)...\n")
-
-    for i in range(max_retries):
-        of_ok = False
-        rest_ok = False
-
-        # OpenFlow port check
-        try:
-            with socket.create_connection((CONTROLLER_IP, CONTROLLER_PORT), timeout=2):
-                of_ok = True
-        except Exception as e:
-            info(f"   OpenFlow error: {e}\n")
-
-        # REST API check using a valid Ryu endpoint
-        try:
-            r = requests.get(f"{REST_URL}/stats/switches", timeout=2)
-            info(f"   REST status: {r.status_code}\n")
-            if r.status_code == 200:
-                rest_ok = True
-        except Exception as e:
-            info(f"   REST error: {e}\n")
-
-        if of_ok and rest_ok:
-            info("*** ✅ Controller is ready.\n")
-            return True
-
-        info(f"   attempt {i + 1}/{max_retries}...\n")
-        time.sleep(delay)
-
-    return False
 
 def deploy_policies() -> bool:
     info("*** 🚀 Deploying network policies...\n")
@@ -186,13 +149,12 @@ def run_automated_tests() -> int:
     net = None
 
     try:
-        if not wait_for_controller():
-            info("❌ Controller is not available.\n")
-            return 1
+        # Ansible already waits for 8080 and 6633 before calling this script
+        info("*** ⏳ Controller was already validated by Ansible. Starting CI network...\n")
 
         net = build_network()
 
-        info("*** ⏳ Waiting for network learning...\n")
+        info("*** ⏳ Waiting for switches to connect and network to learn...\n")
         time.sleep(10)
 
         if not deploy_policies():
@@ -231,3 +193,4 @@ def run_automated_tests() -> int:
 
 if __name__ == "__main__":
     sys.exit(run_automated_tests())
+    
