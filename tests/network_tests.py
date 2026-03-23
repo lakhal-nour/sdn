@@ -198,6 +198,5 @@ def run_automated_tests() -> int:
             info("*** 🛑 Stopping ephemeral CI network...\n")
             net.stop()
 
-
 if __name__ == "__main__":
     sys.exit(run_automated_tests())
