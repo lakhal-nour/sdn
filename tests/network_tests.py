@@ -16,7 +16,7 @@ if PROJECT_ROOT not in sys.path:
 from topology.datacenter_topo import DatacenterTopo
 
 CONTROLLER_IP = "127.0.0.1"
-CONTROLLER_PORT = 6633
+CONTROLLER_PORT = 6653  # ⬅️ CORRECTION ICI : on utilise le port 6653 !
 POLICY_DEPLOY_SCRIPT = os.path.join(PROJECT_ROOT, "scripts", "deploy_policies.py")
 
 ALLOW_TESTS = [
@@ -149,7 +149,7 @@ def run_automated_tests() -> int:
     net = None
 
     try:
-        # Ansible already waits for 8080 and 6633 before calling this script
+        # Ansible already waits for 8080 and 6653 before calling this script
         info("*** ⏳ Controller was already validated by Ansible. Starting CI network...\n")
 
         net = build_network()
@@ -193,4 +193,3 @@ def run_automated_tests() -> int:
 
 if __name__ == "__main__":
     sys.exit(run_automated_tests())
-    
