@@ -7,7 +7,7 @@
             "bands": [
                 {
                     "type": "DROP",
-                    "rate": 50000
+                    "rate": 10000
                 }
             ]
         }
@@ -26,8 +26,13 @@
                     "meter_id": 1
                 },
                 {
-                    "type": "GOTO_TABLE",
-                    "table_id": 1
+                    "type": "APPLY_ACTIONS",
+                    "actions": [
+                        {
+                            "type": "OUTPUT",
+                            "port": "NORMAL"
+                        }
+                    ]
                 }
             ]
         }
