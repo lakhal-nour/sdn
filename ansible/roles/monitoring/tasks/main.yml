@@ -1,5 +1,11 @@
 ---
-- name: Remove stale grafana container if exists
+- name: Clean up old monitoring stack and orphans
+  shell: docker-compose down --remove-orphans
+  args:
+    chdir: "{{ playbook_dir }}/.."
+  ignore_errors: true
+
+- name: Force remove specific containers just in case
   shell: docker rm -f grafana prometheus ryu_exporter || true
 
 - name: Ensure monitoring stack is started
