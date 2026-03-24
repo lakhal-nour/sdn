@@ -47,7 +47,7 @@ def main():
 
     info("*** Persistent lab topology is running.\n")
     info("*** Controller connected at %s:%s\n" % (CONTROLLER_IP, CONTROLLER_PORT))
-
+    CLI(net)
     try:
         while True:
             time.sleep(60)
