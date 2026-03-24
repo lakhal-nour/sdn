@@ -1,4 +1,10 @@
 ---
+- name: S'assurer que tmux est installé
+  apt:
+    name: tmux
+    state: present
+  become: yes
+
 - name: Vérifier si la topologie Mininet tourne déjà (via OVS)
   shell: ovs-vsctl list-br
   become: yes
@@ -10,13 +16,10 @@
   debug:
     msg: "Bridges actuels : {{ existing_ovs.stdout_lines | default(['Aucun bridge détecté']) }}"
 
-- name: Démarrer la topologie LAB si elle est absente
+- name: Démarrer la topologie LAB dans une session tmux (si absente)
   shell: >
-    nohup python3 {{ playbook_dir }}/../topology/start_lab_topology.py
-    > /tmp/mininet-lab.log 2>&1 < /dev/null &
+    tmux new-session -d -s mininet_lab 'sudo env PYTHONDONTWRITEBYTECODE=1 python3 {{ playbook_dir }}/../topology/start_lab_topology.py'
   become: yes
-  environment:
-    PYTHONDONTWRITEBYTECODE: "1"
   when: existing_ovs.stdout == ""
 
 - name: Attendre quelques secondes que la topologie démarre (si nouvellement lancée)
