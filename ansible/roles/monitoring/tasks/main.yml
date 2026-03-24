@@ -3,7 +3,7 @@
   shell: docker rm -f grafana prometheus ryu_exporter || true
 
 - name: Ensure monitoring stack is started
-  shell: docker compose up -d --build
+  shell: docker-compose up -d --build
   args:
     chdir: "{{ playbook_dir }}/.."
   register: monitoring_result
