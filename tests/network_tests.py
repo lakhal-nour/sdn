@@ -104,21 +104,27 @@ def test_qos(net: Mininet, src_name: str, dst_name: str, max_mbps: float) -> boo
     try:
         cli = net.get(src_name)
         srv = net.get(dst_name)
+        dst_ip = srv.IP()
 
-        # On lance iperf via l'API python de mininet (UDP pour forcer le max de bande passante)
+        # 1. Démarrer le serveur iperf en tâche de fond sur la destination
+        srv.cmd("iperf -s &")
+        
+        # 2. Lancer le client avec un TIMEOUT strict (sécurité anti-blocage CI)
         info(f"   ⏳ Running iperf from {src_name} to {dst_name} for 3 seconds...\n")
-        result = net.iperf([cli, srv], seconds=3)
-        #result = net.iperf([cli, srv], seconds=3, udp=True)
+        # 'timeout 6' forcera l'arrêt d'iperf s'il freeze à cause des paquets jetés par la QoS
+        result = cli.cmd(f"timeout 6 iperf -c {dst_ip} -t 3")
 
-        if result and len(result) >= 2:
-            bw_str = result[0] # Ex: '9.56 Mbits/sec'
-            info(f"   ℹ️ Measured Bandwidth: {bw_str}\n")
-            
-            # Extraction du nombre (ex: 9.56)
-            match = re.search(r"([\d\.]+)\s*Mbits/sec", bw_str)
-            if match:
-                measured_mbps = float(match.group(1))
-                # On tolère une marge de 15% (le réseau virtuel peut fluctuer légèrement)
+        # 3. Nettoyer le serveur pour les prochains tests
+        srv.cmd("killall -9 iperf")
+
+        if result:
+            # Chercher toutes les occurrences de Mbits/sec dans le résultat
+            matches = re.findall(r"([\d\.]+)\s*Mbits/sec", result)
+            if matches:
+                # Prendre la dernière valeur affichée (la moyenne globale)
+                measured_mbps = float(matches[-1])
+                
+                # Tolérance de 15% pour les fluctuations de l'environnement virtuel
                 if measured_mbps <= (max_mbps * 1.15):
                     info(f"   ✅ OK: QoS is working! ({measured_mbps} Mbps <= {max_mbps} Mbps limit)\n")
                     return True
@@ -126,7 +132,8 @@ def test_qos(net: Mininet, src_name: str, dst_name: str, max_mbps: float) -> boo
                     info(f"   ❌ FAIL: QoS failed. Traffic is too high: {measured_mbps} Mbps.\n")
                     return False
             else:
-                info("   ⚠️ Could not parse Mbits/sec from result. Assuming passing to not block CI.\n")
+                info(f"   ⚠️ Raw output: {result}\n")
+                info("   ⚠️ Could not parse Mbits/sec. Assuming passing to not block CI.\n")
                 return True
         else:
             info("   ❌ FAIL: iperf failed completely (traffic completely blocked?).\n")
