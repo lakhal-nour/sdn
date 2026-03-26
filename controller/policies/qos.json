@@ -1,7 +1,7 @@
 {
     "meters": [
         {
-            "description": "Limiteur de bande passante a 10 Mbps",
+            "description": "Limiteur de bande passante a 5 Mbps",
             "flags": "KBPS",
             "meter_id": 1,
             "bands": [

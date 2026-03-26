@@ -5,7 +5,7 @@
     ],
     "specific_rules": [
         {
-            "description": "Bloquer le trafic h1 vers h4",
+            "description": "Bloquer le trafic h2 vers h4",
             "priority": 100,
             "dl_type": "IPv4",
             "nw_src": "10.0.0.2/32",
