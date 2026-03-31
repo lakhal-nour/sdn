@@ -14,16 +14,14 @@
   ],
   "qos_rules": [
     {
-      "description": "Appliquer le meter 1 au trafic IPv4 sortant de h4",
-      "priority": 200,
+      "description": "Appliquer la QoS au trafic IPv4 sortant de h4",
       "match": {
-        "eth_type": 2048,
         "ipv4_src": "10.0.0.4"
       },
       "instructions": [
         {
-          "type": "METER",
-          "meter_id": 1
+          "type": "QUEUE",
+          "queue_id": 0
         }
       ]
     }

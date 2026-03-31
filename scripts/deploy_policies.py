@@ -20,16 +20,17 @@ FIREWALL_DPIDS = [
     "0000000000000003",
     "0000000000000004",
 ]
+OVSDB_PORT = 6632
 HOST_EDGE_SWITCH = {
     "10.0.0.1": 3,  # h1 sur s3
     "10.0.0.2": 3,  # h2 sur s3
     "10.0.0.3": 4,  # h3 sur s4
     "10.0.0.4": 4   # h4 sur s4
 }
-
 # Pour les APIs OpenFlow /stats/*
 OF_DPIDS = [1, 2, 3, 4]
 #QOS_DPIDS = [4]
+
 def get_qos_dpids_for_rule(rule: Dict[str, Any]) -> List[int]:
     match = rule.get("match", {})
     src_ip = match.get("ipv4_src") or match.get("nw_src")
@@ -38,6 +39,62 @@ def get_qos_dpids_for_rule(rule: Dict[str, Any]) -> List[int]:
     src_ip = src_ip.split("/")[0]
     dpid = HOST_EDGE_SWITCH.get(src_ip)
     return [dpid] if dpid is not None else []
+
+
+def configure_ovsdb_for_switch(dpid: int) -> None:
+    url = f"{RYU_BASE_URL}/v1.0/conf/switches/{dpid:016x}/ovsdb_addr"
+    payload = f"tcp:127.0.0.1:{OVSDB_PORT}"
+    response = requests.put(url, json=payload, timeout=REQUEST_TIMEOUT)
+    response.raise_for_status()
+    print(f"    ✅ OVSDB configuré pour le switch {dpid}")
+
+
+def build_queue_payload_from_meter(meter: Dict[str, Any], port_name: str) -> Dict[str, Any]:
+    bands = meter.get("bands", [])
+    if not bands:
+        raise ValueError(f"Meter sans bande: {meter}")
+
+    rate_kbps = bands[0]["rate"]
+    max_rate_bps = str(int(rate_kbps) * 1000)
+
+    return {
+        "port_name": port_name,
+        "type": "linux-htb",
+        "max_rate": max_rate_bps,
+        "queues": [
+            {
+                "max_rate": max_rate_bps
+            }
+        ]
+    }
+
+
+def build_qos_rule_payload(rule: Dict[str, Any]) -> Dict[str, Any]:
+    match = rule.get("match", {})
+    src_ip = match.get("ipv4_src") or match.get("nw_src")
+
+    return {
+        "match": {
+            "nw_src": src_ip,
+            "dl_type": "IPv4"
+        },
+        "actions": {
+            "queue": "0"
+        }
+    }
+
+
+def get_port_name_for_qos_source(src_ip: str) -> str:
+    src_ip = src_ip.split("/")[0]
+    if src_ip == "10.0.0.3":
+        return "s4-eth1"
+    if src_ip == "10.0.0.4":
+        return "s4-eth2"
+    if src_ip == "10.0.0.1":
+        return "s3-eth1"
+    if src_ip == "10.0.0.2":
+        return "s3-eth2"
+    raise ValueError(f"IP source QoS inconnue: {src_ip}")
 
 def load_json_file(path: str) -> Dict[str, Any]:
     if not os.path.exists(path):
@@ -236,6 +293,12 @@ def deploy_qos() -> None:
     for rule in qos_rules:
         validate_qos_rule(rule)
 
+    if not meters:
+        print("    ⚠️ Aucun meter défini pour la QoS.")
+        return
+
+    meter = meters[0]
+
     for rule in qos_rules:
         target_dpids = get_qos_dpids_for_rule(rule)
 
@@ -243,18 +306,25 @@ def deploy_qos() -> None:
             print(f"    ⚠️ Impossible de déterminer le switch cible pour la règle QoS: {rule}")
             continue
 
-        for dpid in target_dpids:
-            for meter in meters:
-                meter_payload = {"dpid": dpid}
-                meter_payload.update(meter)
-                url = f"{RYU_BASE_URL}/stats/meterentry/add"
-                http_post(url, meter_payload)
-                print(f"    ✅ Meter appliqué sur switch {dpid}: {meter.get('description', meter)}")
+        match = rule.get("match", {})
+        src_ip = match.get("ipv4_src") or match.get("nw_src")
+        if not src_ip:
+            print(f"    ⚠️ Règle QoS sans IP source: {rule}")
+            continue
 
-            rule_payload = {"dpid": dpid}
-            rule_payload.update(rule)
-            url = f"{RYU_BASE_URL}/stats/flowentry/add"
-            http_post(url, rule_payload)
+        port_name = get_port_name_for_qos_source(src_ip)
+        queue_payload = build_queue_payload_from_meter(meter, port_name)
+        qos_rule_payload = build_qos_rule_payload(rule)
+
+        for dpid in target_dpids:
+            configure_ovsdb_for_switch(dpid)
+
+            queue_url = f"{RYU_BASE_URL}/qos/queue/{dpid:016x}"
+            http_post(queue_url, queue_payload)
+            print(f"    ✅ Queue QoS appliquée sur switch {dpid}: {meter.get('description', meter)}")
+
+            rule_url = f"{RYU_BASE_URL}/qos/rules/{dpid:016x}"
+            http_post(rule_url, qos_rule_payload)
             print(f"    ✅ Règle QoS appliquée sur switch {dpid}: {rule.get('description', rule)}")
 def main() -> int:
     try:
