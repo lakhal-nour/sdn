@@ -1,7 +1,7 @@
 controller:
   apps:
-    - ryu.app.rest_qos
-    - ryu.app.rest_conf_switch
-    - ryu.app.qos_simple_switch_13
+    - ryu.app.simple_switch_13      # On remet le basique, il est instantané !
+    - ryu.app.ofctl_rest
+    - ryu.app.rest_firewall
   of_port: 6653
   rest_port: 8080

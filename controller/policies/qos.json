@@ -1,29 +1,9 @@
 {
-  "meters": [
+  "type": "APPLY_ACTIONS",
+  "actions": [
     {
-      "description": "Limiter le débit à 10 Mbps",
-      "flags": "KBPS",
-      "meter_id": 1,
-      "bands": [
-        {
-          "type": "DROP",
-          "rate": 10000
-        }
-      ]
-    }
-  ],
-  "qos_rules": [
-    {
-      "description": "Appliquer la QoS au trafic IPv4 sortant de h4",
-      "match": {
-        "ipv4_src": "10.0.0.4"
-      },
-      "instructions": [
-        {
-          "type": "QUEUE",
-          "queue_id": 0
-        }
-      ]
+      "type": "OUTPUT",
+      "port": "NORMAL"
     }
   ]
 }
