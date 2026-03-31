@@ -50,7 +50,8 @@ def ip_to_host(ip: str) -> str:
 # --- MAGIE NETDEVOPS : LECTURE DYNAMIQUE DES JSON ---
 def get_dynamic_tests():
     """Lit les fichiers JSON pour déterminer quels tests exécuter automatiquement."""
-    tests = {'allow': [("h2", "h3")], 'deny': [], 'qos': None}
+    tests = {'allow': [("h1", "h4")], 'deny': [], 'qos': None}
+    #tests = {'allow': [("h2", "h3")], 'deny': [], 'qos': None}
     
     fw_path = os.path.join(PROJECT_ROOT, "controller", "policies", "firewall.json")
     qos_path = os.path.join(PROJECT_ROOT, "controller", "policies", "qos.json")
