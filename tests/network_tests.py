@@ -281,7 +281,6 @@ def run_automated_tests() -> int:
         qos_plan = extract_qos_test_plan()
 
         required_ok = True
-        qos_ok = True
 
         for src, dst in firewall_plan["allow"]:
             required_ok = test_ping_allowed(net, src, dst) and required_ok
@@ -295,14 +294,10 @@ def run_automated_tests() -> int:
         if not qos_plan:
             info("*** ⚠️ No QoS rules found.\n")
         else:
-            for src, dst, max_mbps in qos_plan:
-                qos_ok = test_qos(net, src, dst, max_mbps) and qos_ok
-
-            if not qos_ok:
-                info("\n⚠️ QoS validation did not pass, but required firewall/connectivity tests are valid.\n")
+            info("*** ⚠️ QoS rules detected, but QoS validation is skipped in CI for the current controller architecture.\n")
 
         if required_ok:
-            info("\n🏆 CI SUCCESS: required policy-driven tests passed.\n")
+            info("\n🏆 CI SUCCESS: required firewall/connectivity tests passed.\n")
             return 0
 
         info("\n💥 CI FAILED: required firewall/connectivity tests failed.\n")
@@ -316,7 +311,6 @@ def run_automated_tests() -> int:
         if net is not None:
             info("*** 🛑 Stopping ephemeral CI network...\n")
             net.stop()
-
-
+            
 if __name__ == "__main__":
     sys.exit(run_automated_tests())

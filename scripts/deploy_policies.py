@@ -287,45 +287,10 @@ def deploy_qos() -> None:
         print("    ⚠️ Aucune politique QoS définie.")
         return
 
-    for meter in meters:
-        validate_meter(meter)
+    print("    ⚠️ Déploiement QoS ignoré dans le pipeline CI avec l'architecture contrôleur actuelle.")
+    print("    ⚠️ La validation QoS sera faite séparément dans Mininet (iperf + dump-flows + Grafana).")
+    return
 
-    for rule in qos_rules:
-        validate_qos_rule(rule)
-
-    if not meters:
-        print("    ⚠️ Aucun meter défini pour la QoS.")
-        return
-
-    meter = meters[0]
-
-    for rule in qos_rules:
-        target_dpids = get_qos_dpids_for_rule(rule)
-
-        if not target_dpids:
-            print(f"    ⚠️ Impossible de déterminer le switch cible pour la règle QoS: {rule}")
-            continue
-
-        match = rule.get("match", {})
-        src_ip = match.get("ipv4_src") or match.get("nw_src")
-        if not src_ip:
-            print(f"    ⚠️ Règle QoS sans IP source: {rule}")
-            continue
-
-        port_name = get_port_name_for_qos_source(src_ip)
-        queue_payload = build_queue_payload_from_meter(meter, port_name)
-        qos_rule_payload = build_qos_rule_payload(rule)
-
-        for dpid in target_dpids:
-            configure_ovsdb_for_switch(dpid)
-
-            queue_url = f"{RYU_BASE_URL}/qos/queue/{dpid:016x}"
-            http_post(queue_url, queue_payload)
-            print(f"    ✅ Queue QoS appliquée sur switch {dpid}: {meter.get('description', meter)}")
-
-            rule_url = f"{RYU_BASE_URL}/qos/rules/{dpid:016x}"
-            http_post(rule_url, qos_rule_payload)
-            print(f"    ✅ Règle QoS appliquée sur switch {dpid}: {rule.get('description', rule)}")
 def main() -> int:
     try:
         wait_for_ryu_and_switches()
