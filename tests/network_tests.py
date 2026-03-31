@@ -226,7 +226,7 @@ def test_qos(net: Mininet, src_name: str, dst_name: str, max_mbps: float) -> boo
         info(f"   Client output: {result}\n")
         info(f"   Server output: {srv_log}\n")
 
-        matches = re.findall(r"([0-9]*\\.?[0-9]+)\\s+Mbits/sec", result)
+        matches = re.findall(r"([0-9]*\.?[0-9]+)\s+Mbits/sec", result)
         if not matches:
             info("   ❌ FAIL: could not parse UDP iperf throughput.\n")
             return False
@@ -243,7 +243,7 @@ def test_qos(net: Mininet, src_name: str, dst_name: str, max_mbps: float) -> boo
     except Exception as e:
         info(f"   ❌ Exception in QoS test: {e}\n")
         return False
-
+        
 def build_network() -> Mininet:
     info("*** 🏗️ Creating ephemeral CI network...\n")
     topo = DatacenterTopo()
