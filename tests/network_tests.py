@@ -1,11 +1,11 @@
-import json
 import os
 import sys
 import time
 import subprocess
 import re
-from functools import partial
+import json
 import itertools
+from functools import partial
 
 from mininet.net import Mininet
 from mininet.node import RemoteController, OVSKernelSwitch
@@ -42,6 +42,12 @@ def ip_to_host(ip: str) -> str:
     clean_ip = ip.split('/')[0]
     mapping = {
         "10.0.0.1": "h1",
+        "10.0.0.2": "h2",
+        "10.0.0.3": "h3",
+        "10.0.0.4": "h4"
+    }
+    return mapping.get(clean_ip)
+
 # --- MAGIE NETDEVOPS : LECTURE 100% DYNAMIQUE DES JSON ---
 def get_dynamic_tests():
     """Lit les fichiers JSON pour déterminer dynamiquement quels tests exécuter."""
