@@ -70,30 +70,6 @@ def load_json(path: str) -> Dict[str, Any]:
         return json.load(f)
 
 
-def is_ipv4_rule(rule: Dict[str, Any]) -> bool:
-    dl_type = rule.get("dl_type")
-    eth_type = rule.get("eth_type")
-    return dl_type == "IPv4" or eth_type == 2048 or (dl_type is None and eth_type is None)
-
-
-def is_arp_rule(rule: Dict[str, Any]) -> bool:
-    dl_type = rule.get("dl_type")
-    eth_type = rule.get("eth_type")
-    return dl_type == "ARP" or eth_type == 2054
-
-
-def extract_firewall_rules(fw_data: Dict[str, Any]) -> List[Dict[str, Any]]:
-    rules = []
-
-    for rule in fw_data.get("specific_rules", []):
-        rules.append(rule)
-
-    for rule in fw_data.get("rules", []):
-        rules.append(rule)
-
-    return rules
-
-
 def extract_match_from_rule(rule: Dict[str, Any]) -> Dict[str, Any]:
     return rule.get("match", rule)
 
@@ -103,6 +79,12 @@ def extract_action(rule: Dict[str, Any]) -> Optional[str]:
     return action.upper() if isinstance(action, str) else action
 
 
+def is_ipv4_rule(rule: Dict[str, Any]) -> bool:
+    dl_type = rule.get("dl_type")
+    eth_type = rule.get("eth_type")
+    return dl_type == "IPv4" or eth_type == 2048 or (dl_type is None and eth_type is None)
+
+
 def extract_firewall_test_plan() -> Dict[str, List[Tuple[str, str]]]:
     fw_path = os.path.join(PROJECT_ROOT, "controller", "policies", "firewall.json")
     fw_data = load_json(fw_path)
@@ -110,7 +92,9 @@ def extract_firewall_test_plan() -> Dict[str, List[Tuple[str, str]]]:
     all_pairs = set(get_all_host_pairs())
     deny_pairs: Set[Tuple[str, str]] = set()
 
-    rules = extract_firewall_rules(fw_data)
+    rules = []
+    rules.extend(fw_data.get("specific_rules", []))
+    rules.extend(fw_data.get("rules", []))
 
     for rule in rules:
         action = extract_action(rule)
@@ -145,12 +129,12 @@ def extract_qos_test_plan() -> List[Tuple[str, str, float]]:
     for meter in qos_data.get("meters", []):
         meter_id = meter.get("meter_id")
         bands = meter.get("bands", [])
+
         if meter_id is None or not bands:
             continue
 
-        first_band = bands[0]
-        rate = first_band.get("rate")
-        flags = str(meter.get("flags", "")).upper()
+        rate = bands[0].get("rate")
+        flags = str(meter.get("flags", "KBPS")).upper()
 
         if rate is None:
             continue
@@ -160,7 +144,6 @@ def extract_qos_test_plan() -> List[Tuple[str, str, float]]:
         elif flags == "MBPS":
             rate_mbps = float(rate)
         else:
-            # fallback le plus raisonnable pour ton cas
             rate_mbps = float(rate) / 1000.0
 
         meters[meter_id] = rate_mbps
@@ -187,10 +170,7 @@ def extract_qos_test_plan() -> List[Tuple[str, str, float]]:
             continue
 
         if not dst_host:
-            # choisir une destination automatiquement différente de la source
             candidates = [h for h in HOST_IP_MAP.keys() if h != src_host]
-            if not candidates:
-                continue
             dst_host = candidates[0]
 
         qos_tests.append((src_host, dst_host, meters[meter_id]))
@@ -208,6 +188,7 @@ def test_ping_allowed(net: Mininet, src_name: str, dst_name: str) -> bool:
         return True
 
     info(f"   ❌ FAIL: {src_name} cannot reach {dst_name}\n")
+    info(f"   Output: {result}\n")
     return False
 
 
@@ -221,6 +202,7 @@ def test_ping_denied(net: Mininet, src_name: str, dst_name: str) -> bool:
         return True
 
     info(f"   ❌ FAIL: traffic {src_name} -> {dst_name} is NOT blocked\n")
+    info(f"   Output: {result}\n")
     return False
 
 
@@ -233,21 +215,24 @@ def test_qos(net: Mininet, src_name: str, dst_name: str, max_mbps: float) -> boo
         dst_ip = srv.IP()
 
         srv.cmd("killall -9 iperf || true")
-        srv.cmd("iperf -s -p 5001 > /tmp/iperf_server.log 2>&1 &")
-        time.sleep(1)
+        srv.cmd("iperf -s -p 5001 >/tmp/iperf_server.log 2>&1 &")
+        time.sleep(2)
 
         info(f"   ⏳ Running iperf from {src_name} to {dst_name} for 4 seconds...\n")
-        result = cli.cmd(f"timeout 8 iperf -c {dst_ip} -p 5001 -t 4")
+        result = cli.cmd(f"iperf -c {dst_ip} -p 5001 -t 4")
+        srv_log = srv.cmd("cat /tmp/iperf_server.log || true")
         srv.cmd("killall -9 iperf || true")
 
-        matches = re.findall(r"([\d\.]+)\s*Mbits/sec", result)
+        info(f"   Client output: {result}\n")
+        info(f"   Server output: {srv_log}\n")
+
+        matches = re.findall(r"([0-9]*\.?[0-9]+)\s+Mbits/sec", result)
         if not matches:
             info("   ❌ FAIL: could not parse iperf throughput.\n")
             return False
 
         measured_mbps = float(matches[-1])
 
-        # tolérance de 15%
         if measured_mbps <= (max_mbps * 1.15):
             info(f"   ✅ OK: QoS respected ({measured_mbps} Mbps <= {max_mbps} Mbps)\n")
             return True
@@ -302,11 +287,13 @@ def run_automated_tests() -> int:
 
         if not firewall_plan["deny"]:
             info("*** ⚠️ No DENY firewall rules found.\n")
+
         for src, dst in firewall_plan["deny"]:
             all_ok = test_ping_denied(net, src, dst) and all_ok
 
         if not qos_plan:
             info("*** ⚠️ No QoS rules found.\n")
+
         for src, dst, max_mbps in qos_plan:
             all_ok = test_qos(net, src, dst, max_mbps) and all_ok
 
