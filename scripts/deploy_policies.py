@@ -223,20 +223,19 @@ def deploy_qos() -> None:
         validate_qos_rule(rule)
 
     for dpid in QOS_DPIDS:
-    for meter in meters:
-        meter_payload = {"dpid": dpid}
-        meter_payload.update(meter)
-        url = f"{RYU_BASE_URL}/stats/meterentry/add"
-        http_post(url, meter_payload)
-        print(f"    ✅ Meter appliqué sur switch {dpid}: {meter.get('description', meter)}")
+        for meter in meters:
+            meter_payload = {"dpid": dpid}
+            meter_payload.update(meter)
+            url = f"{RYU_BASE_URL}/stats/meterentry/add"
+            http_post(url, meter_payload)
+            print(f"    ✅ Meter appliqué sur switch {dpid}: {meter.get('description', meter)}")
 
-    for rule in qos_rules:
-        rule_payload = {"dpid": dpid}
-        rule_payload.update(rule)
-        url = f"{RYU_BASE_URL}/stats/flowentry/add"
-        http_post(url, rule_payload)
-        print(f"    ✅ Règle QoS appliquée sur switch {dpid}: {rule.get('description', rule)}")
-
+        for rule in qos_rules:
+            rule_payload = {"dpid": dpid}
+            rule_payload.update(rule)
+            url = f"{RYU_BASE_URL}/stats/flowentry/add"
+            http_post(url, rule_payload)
+            print(f"    ✅ Règle QoS appliquée sur switch {dpid}: {rule.get('description', rule)}")
 def main() -> int:
     try:
         wait_for_ryu_and_switches()
