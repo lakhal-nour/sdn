@@ -1,0 +1,25 @@
+groups:
+  - name: network_rules
+    rules:
+      # SCÉNARIO 1 : Trafic trop élevé (Remédiation)
+      # Si le débit d'une interface dépasse 5 Mbits/s pendant 10 secondes
+      - alert: HighTrafficAnomaly
+        expr: sflow_interface_bps > 5000000 
+        for: 10s
+        labels:
+          severity: critical
+          action: block_source
+        annotations:
+          summary: "Trafic excessif sur l'interface {{ $labels.ifname }}"
+          description: "L'hôte sur le port {{ $labels.ifindex }} génère trop de trafic."
+
+      # SCÉNARIO 2 : Lien coupé (Self-Healing)
+      # Si une interface qui était active passe à 0 (down)
+      - alert: LinkDown
+        expr: sflow_interface_status == 0
+        for: 5s
+        labels:
+          severity: warning
+          action: heal_link
+        annotations:
+          summary: "Lien coupé détecté sur {{ $labels.switch }}"

@@ -1,0 +1,15 @@
+# Fichier: docker/Dockerfile.remediation
+FROM python:3.9-slim
+
+WORKDIR /app
+
+# Installation de Flask pour le serveur Web et Requests pour parler à Ryu
+RUN pip install flask requests
+
+# Copie du script
+COPY scripts/remediation_agent.py /app/
+
+# Port du Webhook
+EXPOSE 5000
+
+CMD ["python3", "remediation_agent.py"]

@@ -1,6 +1,20 @@
 version: "3.8"
 
 services:
+  # 1. Le Contrôleur SDN Ryu
+  sdn-controller:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: sdn-controller
+    ports:
+      - "6653:6653"
+      - "8080:8080"
+    networks:
+      - sdn_net
+    restart: unless-stopped
+
+  # 2. L'exportateur de métriques Ryu
   ryu_exporter:
     build:
       context: .
@@ -14,12 +28,24 @@ services:
       - sdn_net
     restart: unless-stopped
 
+  # 3. sFlow-RT (Pour le monitoring temps réel et Scénario 1)
+  sflow-rt:
+    image: sflow/prometheus:latest # 👈 Utilise cette image spécifique
+    container_name: sflow-rt
+    ports:
+      - "6343:6343/udp"
+      - "8008:8008"
+    networks:
+      - sdn_net
+    restart: unless-stopped
+
+  # 4. Prometheus (Base de données métriques)
   prometheus:
     image: prom/prometheus:latest
     container_name: prometheus
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      # 👇 1. AJOUTE CECI : Sauvegarde l'historique des métriques
+      - ./monitoring/prometheus_rules.yml:/etc/prometheus/prometheus_rules.yml:ro
       - prometheus_data:/prometheus 
     ports:
       - "9090:9090"
@@ -27,14 +53,40 @@ services:
       - sdn_net
     restart: unless-stopped
 
+  # 5. Alertmanager (Pour envoyer les alertes au script Python)
+  alertmanager:
+    image: prom/alertmanager:latest
+    container_name: alertmanager
+    volumes:
+      - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    ports:
+      - "9093:9093"
+    networks:
+      - sdn_net
+    restart: unless-stopped
+
+  # 6. Grafana (Visualisation)
   grafana:
     image: grafana/grafana:latest
     container_name: grafana
     ports:
       - "3001:3000"
     volumes:
-      # 👇 2. AJOUTE CECI : Sauvegarde tes Dashboards et Data Sources
       - grafana_data:/var/lib/grafana 
+    networks:
+      - sdn_net
+    restart: unless-stopped
+
+  # 7. Agent de Remédiation (Le script Python Webhook)
+  remediation_agent:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.remediation
+    container_name: remediation_agent
+    environment:
+      - RYU_URL=http://sdn-controller:8080
+    ports:
+      - "5000:5000"
     networks:
       - sdn_net
     restart: unless-stopped
@@ -43,7 +95,6 @@ networks:
   sdn_net:
     external: true
 
-# 👇 3. AJOUTE CE BLOC TOUT EN BAS : Déclaration des disques durs virtuels
 volumes:
   grafana_data:
   prometheus_data:

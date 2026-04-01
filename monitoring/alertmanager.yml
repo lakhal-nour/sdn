@@ -1,0 +1,15 @@
+global:
+  resolve_timeout: 5m
+
+route:
+  group_by: ['alertname']
+  group_wait: 5s
+  group_interval: 5s
+  repeat_interval: 1h
+  receiver: 'remediation-webhook'
+
+receivers:
+- name: 'remediation-webhook'
+  webhook_configs:
+    # L'IP 172.17.0.1 correspond souvent à l'hôte Docker (ton script Python)
+    - url: 'http://172.17.0.1:5000/webhook'

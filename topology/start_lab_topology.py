@@ -19,6 +19,15 @@ from topology.datacenter_topo import DatacenterTopo
 CONTROLLER_IP = "127.0.0.1"
 CONTROLLER_PORT = 6653
 
+def configure_sflow(net):
+    collector = "127.0.0.1" # L'IP de sFlow-RT
+    for switch in net.switches:
+        cmd = (f'ovs-vsctl -- --id=@sflow create sflow targets="{collector}:6343" '
+               f'agent={switch.name} header=128 sampling=64 polling=10 '
+               f'-- set bridge {switch.name} sflow=@sflow')
+        info(f"*** Configuring sFlow on {switch.name}\n")
+        switch.cmd(cmd)
+
 
 def main():
     setLogLevel("info")
@@ -45,6 +54,7 @@ def main():
     c0.start()
     time.sleep(2)
     net.start()
+    configure_sflow(net)
 
     info("*** Persistent lab topology is running.\n")
     info("*** Controller connected at %s:%s\n" % (CONTROLLER_IP, CONTROLLER_PORT))

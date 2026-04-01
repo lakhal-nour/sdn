@@ -20,6 +20,6 @@ class DatacenterTopo(Topo):
         self.addLink(h4, leaf2)
 
         self.addLink(leaf1, spine1)
-        #self.addLink(leaf1, spine2)
+        self.addLink(leaf1, spine2)
         self.addLink(leaf2, spine1)
-        #self.addLink(leaf2, spine2)
+        self.addLink(leaf2, spine2)
